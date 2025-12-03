@@ -1,0 +1,19 @@
+# Visual Elements Orchestrator v1.0 Dependencies
+
+# Web framework
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+
+# HTTP client for calling AI services
+httpx>=0.25.0
+
+# Settings management
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# Type hints
+python-dotenv>=1.0.0
+
+# Development
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
