@@ -45,10 +45,18 @@ The Visual Elements Orchestrator (Port 8090) is the central gateway for all AI-g
 
 ---
 
-## Base URL
+## Base URLs
 
+### Production
 ```
-http://localhost:8090
+Elementor (AI Orchestrator): https://web-production-3b42.up.railway.app
+Layout Service:              https://web-production-f0d13.up.railway.app
+```
+
+### Local Development
+```
+Elementor (AI Orchestrator): http://localhost:8090
+Layout Service:              http://localhost:8504
 ```
 
 All endpoints return JSON. Content-Type: application/json
