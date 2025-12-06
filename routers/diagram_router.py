@@ -106,9 +106,11 @@ async def generate_diagram(request: DiagramGenerateRequest):
     context = {
         "presentationTitle": request.context.presentation_title,
         "slideTitle": request.context.slide_title,
-        "slideIndex": request.context.slide_index
+        "slideIndex": request.context.slide_index,
     }
 
+    if request.context.brand_colors:
+        context["brandColors"] = request.context.brand_colors
     if request.context.industry:
         context["industry"] = request.context.industry
 

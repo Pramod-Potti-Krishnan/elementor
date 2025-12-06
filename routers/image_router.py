@@ -61,9 +61,13 @@ async def generate_image(request: ImageGenerateRequest):
     context = {
         "presentationTitle": request.context.presentation_title,
         "slideTitle": request.context.slide_title,
-        "slideIndex": request.context.slide_index
+        "slideIndex": request.context.slide_index,
     }
 
+    if request.context.presentation_theme:
+        context["presentationTheme"] = request.context.presentation_theme
+    if request.context.brand_colors:
+        context["brandColors"] = request.context.brand_colors
     if request.context.industry:
         context["industry"] = request.context.industry
 

@@ -60,9 +60,12 @@ async def generate_table(request: TableGenerateRequest):
     context = {
         "presentationTitle": request.context.presentation_title,
         "slideTitle": request.context.slide_title,
-        "slideIndex": request.context.slide_index
+        "slideIndex": request.context.slide_index,
+        "slideCount": request.context.slide_count,
     }
 
+    if request.context.presentation_theme:
+        context["presentationTheme"] = request.context.presentation_theme
     if request.context.industry:
         context["industry"] = request.context.industry
 
@@ -160,7 +163,8 @@ async def transform_table(request: TableTransformRequest):
     context = {
         "presentationTitle": request.context.presentation_title,
         "slideTitle": request.context.slide_title,
-        "slideIndex": request.context.slide_index
+        "slideIndex": request.context.slide_index,
+        "slideCount": request.context.slide_count,
     }
 
     # Build options dict from request
@@ -270,7 +274,10 @@ async def analyze_table(request: TableAnalyzeRequest):
     context = {
         "presentationTitle": request.context.presentation_title,
         "slideTitle": request.context.slide_title,
-        "slideIndex": request.context.slide_index
+        "slideIndex": request.context.slide_index,
+        "slideCount": request.context.slide_count,
+        "presentationId": request.context.presentation_id,
+        "slideId": request.context.slide_id,
     }
 
     # Call Table AI Service

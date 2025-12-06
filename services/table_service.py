@@ -77,23 +77,47 @@ class TableService:
         Returns:
             Dict with success status and either html_content or error details
         """
+        # Build context object matching backend SlideContext schema
+        # Required fields: presentationTitle, slideIndex, slideCount
+        backend_context = {
+            "presentationTitle": context.get("presentationTitle", "Untitled"),
+            "slideIndex": context.get("slideIndex", 0),
+            "slideCount": context.get("slideCount", 1),
+        }
+        # Optional context fields
+        if context.get("presentationTheme"):
+            backend_context["presentationTheme"] = context["presentationTheme"]
+        if context.get("slideTitle"):
+            backend_context["slideTitle"] = context["slideTitle"]
+
         request_body = {
             "prompt": prompt,
             "presentationId": presentation_id,
             "slideId": slide_id,
             "elementId": element_id,
-            "context": context,
+            "context": backend_context,
             "constraints": constraints,
-            "preset": preset,
-            "hasHeader": has_header
         }
 
-        if columns:
-            request_body["columns"] = columns
-        if rows:
-            request_body["rows"] = rows
+        # Build structure object if columns/rows provided
+        if columns or rows or has_header is not None:
+            structure = {}
+            if columns:
+                structure["columns"] = columns
+            if rows:
+                structure["rows"] = rows
+            if has_header is not None:
+                structure["hasHeader"] = has_header
+            request_body["structure"] = structure
+
+        # Build style object with preset
+        request_body["style"] = {
+            "preset": preset
+        }
+
+        # Add seed data if provided
         if data:
-            request_body["data"] = data
+            request_body["seedData"] = {"data": data}
 
         logger.info(f"Generating table: preset={preset}, element={element_id}")
         logger.debug(f"Request body: {request_body}")
@@ -201,13 +225,13 @@ class TableService:
         Returns:
             Dict with success status and transformed html_content or error
         """
+        # Backend expects 'sourceTable' not 'sourceContent'
         request_body = {
-            "sourceContent": source_content,
+            "sourceTable": source_content,
             "transformation": transformation,
             "presentationId": presentation_id,
             "slideId": slide_id,
             "elementId": element_id,
-            "context": context,
             "constraints": constraints
         }
 
@@ -273,11 +297,13 @@ class TableService:
         Returns:
             Dict with success status and analysis results or error
         """
+        # Backend expects 'sourceTable' not 'sourceContent'
         request_body = {
-            "sourceContent": source_content,
-            "elementId": element_id,
-            "context": context,
-            "analysisType": analysis_type
+            "sourceTable": source_content,
+            "analysisType": analysis_type,
+            "presentationId": context.get("presentationId", ""),
+            "slideId": context.get("slideId", ""),
+            "elementId": element_id
         }
 
         logger.info(f"Analyzing table: type={analysis_type}, element={element_id}")

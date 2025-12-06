@@ -68,16 +68,33 @@ class ChartService:
         Returns:
             Dict with success status and either chart config or error details
         """
+        # Build context object matching backend ChartContext schema
+        # Required fields: presentationTitle, slideIndex
+        backend_context = {
+            "presentationTitle": context.get("presentationTitle", "Untitled"),
+            "slideIndex": context.get("slideIndex", 0),
+        }
+        # Optional context fields
+        if context.get("slideTitle"):
+            backend_context["slideTitle"] = context["slideTitle"]
+        if context.get("industry"):
+            backend_context["industry"] = context["industry"]
+        if context.get("timeFrame"):
+            backend_context["timeFrame"] = context["timeFrame"]
+
         request_body = {
             "prompt": prompt,
             "chartType": chart_type,
             "presentationId": presentation_id,
             "slideId": slide_id,
             "elementId": element_id,
-            "context": context,
+            "context": backend_context,
             "constraints": constraints,
-            "style": style
         }
+
+        # Add style if provided
+        if style:
+            request_body["style"] = style
 
         if data:
             # Convert data to Chart AI format

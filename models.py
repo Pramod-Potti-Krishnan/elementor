@@ -40,9 +40,12 @@ class ElementContext(BaseModel):
     presentation_title: str
     slide_id: str
     slide_index: int
+    slide_count: int = Field(default=1, ge=1, description="Total number of slides in the deck")
     slide_title: Optional[str] = None
     industry: Optional[str] = None
     time_frame: Optional[str] = None
+    presentation_theme: Optional[str] = Field(default=None, description="Theme/template of the presentation")
+    brand_colors: Optional[List[str]] = Field(default=None, description="Brand colors as hex codes")
 
 
 class ErrorDetail(BaseModel):

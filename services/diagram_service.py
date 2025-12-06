@@ -91,21 +91,60 @@ class DiagramService:
         Returns:
             Dict with jobId for polling or error details
         """
+        # Build request matching backend DiagramRequest schema
+        # Backend expects: content, diagram_type (snake_case), theme (object), constraints (pixel-based)
+
+        # Convert grid constraints to pixel constraints (60px per grid unit)
+        grid_width = constraints.get("gridWidth", 8)
+        grid_height = constraints.get("gridHeight", 6)
+        max_width = grid_width * 60
+        max_height = grid_height * 60
+
+        # Build theme object matching backend DiagramTheme schema
+        theme_obj = {
+            "primaryColor": "#3B82F6",  # Default blue
+            "colorScheme": "complementary",
+            "backgroundColor": "#FFFFFF",
+            "textColor": "#1F2937",
+            "fontFamily": "Inter, system-ui, sans-serif",
+            "style": theme if isinstance(theme, str) else "professional",
+            "useSmartTheming": True
+        }
+
+        # Extract brand colors from context if available
+        if context.get("brandColors") and len(context["brandColors"]) > 0:
+            theme_obj["primaryColor"] = context["brandColors"][0]
+            if len(context["brandColors"]) > 1:
+                theme_obj["secondaryColor"] = context["brandColors"][1]
+
+        # Build constraints object matching backend DiagramConstraints schema
+        backend_constraints = {
+            "maxWidth": max_width,
+            "maxHeight": max_height,
+            "orientation": "landscape" if grid_width > grid_height else "portrait",
+            "complexity": complexity,
+            "animationEnabled": False
+        }
+
+        # Calculate aspect ratio
+        from math import gcd
+        divisor = gcd(grid_width, grid_height)
+        backend_constraints["aspectRatio"] = f"{grid_width // divisor}:{grid_height // divisor}"
+
         request_body = {
-            "prompt": prompt,
-            "diagramType": diagram_type,
-            "presentationId": presentation_id,
-            "slideId": slide_id,
-            "elementId": element_id,
-            "context": context,
-            "constraints": constraints,
-            "direction": direction,
-            "theme": theme,
-            "complexity": complexity
+            "content": prompt,  # Backend uses 'content' not 'prompt'
+            "diagram_type": diagram_type.lower().replace("-", "_"),  # snake_case
+            "data_points": [],  # Empty list, AI will generate
+            "theme": theme_obj,
+            "constraints": backend_constraints,
+            "correlation_id": element_id,
+            "session_id": presentation_id,
+            "user_id": slide_id
         }
 
         if mermaid_code:
-            request_body["mermaidCode"] = mermaid_code
+            # If mermaid code provided, add it as additional context
+            request_body["content"] = f"{prompt}\n\nMermaid code:\n{mermaid_code}"
 
         logger.info(f"Submitting diagram job: type={diagram_type}, element={element_id}")
         logger.debug(f"Request body: {request_body}")

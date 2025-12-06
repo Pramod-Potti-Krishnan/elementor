@@ -67,20 +67,35 @@ class TextService:
         Returns:
             Dict with success status and either html_content or error details
         """
-        request_body = {
-            "prompt": prompt,
-            "presentationId": presentation_id,
-            "slideId": slide_id,
-            "elementId": element_id,
-            "context": context,
-            "constraints": constraints,
+        # Build context object matching backend SlideContext schema
+        # Required fields: presentationTitle, slideIndex, slideCount
+        backend_context = {
+            "presentationTitle": context.get("presentationTitle", "Untitled"),
+            "slideIndex": context.get("slideIndex", 0),
+            "slideCount": context.get("slideCount", 1),
+        }
+        # Optional context fields
+        if context.get("presentationTheme"):
+            backend_context["presentationTheme"] = context["presentationTheme"]
+        if context.get("slideTitle"):
+            backend_context["slideTitle"] = context["slideTitle"]
+
+        # Build options object matching backend TextOptions schema
+        options = {
             "tone": tone,
             "format": format,
             "language": language
         }
 
-        if max_words:
-            request_body["maxWords"] = max_words
+        request_body = {
+            "prompt": prompt,
+            "presentationId": presentation_id,
+            "slideId": slide_id,
+            "elementId": element_id,
+            "context": backend_context,
+            "constraints": constraints,
+            "options": options
+        }
 
         logger.info(f"Generating text: tone={tone}, format={format}, element={element_id}")
         logger.debug(f"Request body: {request_body}")
@@ -180,21 +195,36 @@ class TextService:
         Returns:
             Dict with success status and transformed html_content or error
         """
+        # Build context object matching backend SlideContext schema
+        backend_context = {
+            "presentationTitle": context.get("presentationTitle", "Untitled"),
+            "slideIndex": context.get("slideIndex", 0),
+            "slideCount": context.get("slideCount", 1),
+        }
+        if context.get("presentationTheme"):
+            backend_context["presentationTheme"] = context["presentationTheme"]
+        if context.get("slideTitle"):
+            backend_context["slideTitle"] = context["slideTitle"]
+
+        # Build options if target_language or intensity provided
+        options = {}
+        if target_language:
+            options["targetLanguage"] = target_language
+        if intensity is not None:
+            options["intensity"] = intensity
+
         request_body = {
             "sourceContent": source_content,
             "transformation": transformation,
             "presentationId": presentation_id,
             "slideId": slide_id,
             "elementId": element_id,
-            "context": context,
+            "context": backend_context,
             "constraints": constraints
         }
 
-        if target_language:
-            request_body["targetLanguage"] = target_language
-
-        if intensity is not None:
-            request_body["intensity"] = intensity
+        if options:
+            request_body["options"] = options
 
         logger.info(f"Transforming text: transformation={transformation}, element={element_id}")
 
@@ -263,18 +293,19 @@ class TextService:
         Returns:
             Dict with success status and fitted html_content or error
         """
+        # Backend expects 'content' not 'sourceContent', 'targetFit' not 'constraints'
         request_body = {
-            "sourceContent": source_content,
+            "content": source_content,
             "presentationId": presentation_id,
             "slideId": slide_id,
             "elementId": element_id,
-            "context": context,
-            "constraints": constraints,
-            "preserveStructure": preserve_structure
+            "targetFit": constraints,  # Backend uses 'targetFit' for autofit
+            "strategy": "smart_condense",  # Default strategy
+            "preserveFormatting": preserve_structure
         }
 
         if target_characters:
-            request_body["targetCharacters"] = target_characters
+            request_body["targetFit"]["maxCharacters"] = target_characters
 
         logger.info(f"Auto-fitting text: element={element_id}")
 

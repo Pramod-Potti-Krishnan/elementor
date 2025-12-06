@@ -218,23 +218,67 @@ class InfographicService:
         Returns:
             Dict with success status and either html_content/svg_content or error
         """
+        # Backend uses 'type' not 'infographicType'
+        # Backend uses 32x18 grid system - scale up from 12x8 if needed
+        grid_width = constraints.get("gridWidth", 8)
+        grid_height = constraints.get("gridHeight", 6)
+
+        # Scale grid from 12x8 to 32x18 system if values are small
+        if grid_width <= 12 and grid_height <= 8:
+            # Scale factor: 32/12 ≈ 2.67 for width, 18/8 = 2.25 for height
+            scaled_width = min(32, int(grid_width * 32 / 12))
+            scaled_height = min(18, int(grid_height * 18 / 8))
+        else:
+            scaled_width = min(32, grid_width)
+            scaled_height = min(18, grid_height)
+
+        backend_constraints = {
+            "gridWidth": scaled_width,
+            "gridHeight": scaled_height
+        }
+
+        # Build context object matching backend PresentationContext schema
+        backend_context = {
+            "presentationTitle": context.get("presentationTitle", "Untitled"),
+            "slideIndex": context.get("slideIndex", 0),
+        }
+        if context.get("presentationTheme"):
+            backend_context["presentationTheme"] = context["presentationTheme"]
+        if context.get("slideTitle"):
+            backend_context["slideTitle"] = context["slideTitle"]
+        if context.get("brandColors"):
+            backend_context["brandColors"] = context["brandColors"]
+        if context.get("industry"):
+            backend_context["industry"] = context["industry"]
+
+        # Build style object matching backend StyleOptions schema
+        style_options = {
+            "colorScheme": color_scheme,
+            "iconStyle": icon_style,
+            "density": "balanced",
+            "orientation": "auto"
+        }
+
+        # Build contentOptions object matching backend ContentOptions schema
+        content_options = {
+            "includeIcons": True,
+            "includeDescriptions": True,
+            "includeNumbers": False
+        }
+        if item_count is not None:
+            content_options["itemCount"] = item_count
+
         request_body = {
             "prompt": prompt,
-            "infographicType": infographic_type,
+            "type": infographic_type,  # Backend uses 'type' not 'infographicType'
             "presentationId": presentation_id,
             "slideId": slide_id,
             "elementId": element_id,
-            "context": context,
-            "constraints": constraints,
-            "colorScheme": color_scheme,
-            "iconStyle": icon_style,
-            "generateData": generate_data
+            "context": backend_context,
+            "constraints": backend_constraints,
+            "style": style_options,
+            "contentOptions": content_options
         }
-
-        if item_count is not None:
-            request_body["itemCount"] = item_count
-        if items:
-            request_body["items"] = items
 
         logger.info(f"Generating infographic: type={infographic_type}, element={element_id}")
         logger.debug(f"Request body: {request_body}")

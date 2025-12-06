@@ -74,10 +74,10 @@ async def generate_chart(request: ChartGenerateRequest):
     context = {
         "presentationTitle": request.context.presentation_title,
         "slideTitle": request.context.slide_title,
-        "slideIndex": request.context.slide_index
+        "slideIndex": request.context.slide_index,
     }
 
-    # Add industry and timeFrame if provided
+    # Add optional context fields
     if request.context.industry:
         context["industry"] = request.context.industry
     if request.context.time_frame:

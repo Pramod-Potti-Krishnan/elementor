@@ -107,22 +107,46 @@ class ImageService:
         Returns:
             Dict with success status and either image_url/image_base64 or error details
         """
+        # Build context object matching backend LayoutImageContext schema
+        # Required fields: presentationTitle, slideIndex
+        backend_context = {
+            "presentationTitle": context.get("presentationTitle", "Untitled"),
+            "slideIndex": context.get("slideIndex", 0),
+        }
+        # Optional context fields
+        if context.get("presentationTheme"):
+            backend_context["presentationTheme"] = context["presentationTheme"]
+        if context.get("slideTitle"):
+            backend_context["slideTitle"] = context["slideTitle"]
+        if context.get("brandColors"):
+            backend_context["brandColors"] = context["brandColors"]
+
+        # Build config object matching backend LayoutImageConfig schema
+        config = {
+            "style": style,
+            "aspectRatio": aspect_ratio,
+            "quality": quality
+        }
+
+        # Build options object if optional fields provided
+        options = {}
+        if negative_prompt:
+            options["negativePrompt"] = negative_prompt
+        if seed is not None:
+            options["seed"] = seed
+
         request_body = {
             "prompt": prompt,
             "presentationId": presentation_id,
             "slideId": slide_id,
             "elementId": element_id,
-            "context": context,
+            "context": backend_context,
+            "config": config,
             "constraints": constraints,
-            "style": style,
-            "quality": quality,
-            "aspectRatio": aspect_ratio
         }
 
-        if negative_prompt:
-            request_body["negativePrompt"] = negative_prompt
-        if seed is not None:
-            request_body["seed"] = seed
+        if options:
+            request_body["options"] = options
 
         logger.info(f"Generating image: style={style}, quality={quality}, element={element_id}")
         logger.debug(f"Request body: {request_body}")
