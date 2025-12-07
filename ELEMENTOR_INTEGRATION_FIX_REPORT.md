@@ -1,7 +1,7 @@
 # Elementor Backend Integration Fix Report
 
-**Date:** 2025-12-06
-**Status:** ✅ FIXES IMPLEMENTED
+**Date:** 2025-12-06 (Updated: 2025-12-07)
+**Status:** ✅ CHART SERVICE TESTED & WORKING
 **Issue Source:** Frontend team integration issues documented in `/deckster-frontend/docs/ELEMENTOR_BACKEND_ISSUES.md`
 
 ---
@@ -109,7 +109,7 @@ Files updated:
 
 | Service | Error | Root Cause | Fix Applied |
 |---------|-------|------------|-------------|
-| **Chart** | 404 | Schema issues (context) | ✅ Fixed context structure |
+| **Chart** | 404 | Wrong API endpoint + schema | ✅ Fixed: Uses /generate + job polling |
 | **Diagram** | 422 | Complete schema mismatch | ✅ Full restructure |
 | **Image** | 422 | Missing config/options nesting | ✅ Restructured |
 | **Infographic** | 502 | Service needs deployment + grid mismatch | ✅ Grid scaling added |
@@ -223,9 +223,9 @@ After deploying fixes, verify:
 - [ ] Text Service returns 200 with HTML content
 - [ ] Table Service returns 200 with HTML table
 - [ ] Image Service returns 200 with image URL
-- [ ] Chart Service returns 200 with Chart.js config
+- [x] Chart Service returns 200 with Chart.js config ✅ **TESTED & WORKING**
 - [ ] Diagram Service returns 200 with SVG content
-- [ ] Infographic Service returns 200 (after deployment) with SVG/HTML
+- [ ] Infographic Service returns 200 (after deployment) with SVG/HTML - **502 ERROR (Service down)**
 
 ---
 
