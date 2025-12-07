@@ -4,11 +4,13 @@ Chart AI Service Client
 Handles communication with the Analytics Microservice v3.0 Chart AI endpoints.
 
 Endpoints:
-    - POST /api/ai/chart/generate - Generate Chart.js configuration
-    - GET /api/ai/chart/constraints - Get minimum grid sizes and data limits
-    - GET /api/ai/chart/palettes - Get available color palettes
+    - POST /generate - Submit chart generation job
+    - GET /status/{job_id} - Poll job status
+    - GET /api/v1/chart-types - Get available chart types
+    - GET /api/v1/chart-types/chartjs - Get Chart.js specific types
 """
 
+import asyncio
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -24,8 +26,8 @@ class ChartService:
     Client for the Chart AI Service.
 
     Features:
-        - Async HTTP calls with configurable timeout
-        - Response caching for constraints and palettes
+        - Async HTTP calls with job polling
+        - Response caching for chart types
         - Error handling with retryable status
     """
 
@@ -34,6 +36,8 @@ class ChartService:
         self.timeout = settings.SERVICE_TIMEOUT
         self._constraints_cache: Optional[Dict[str, Any]] = None
         self._palettes_cache: Optional[Dict[str, Any]] = None
+        self.poll_interval = 1.0  # seconds
+        self.poll_timeout = 60.0  # max polling time
 
     async def generate(
         self,
@@ -47,14 +51,17 @@ class ChartService:
         style: Dict[str, Any],
         data: Optional[List[Dict]] = None,
         generate_data: bool = False,
-        axes: Optional[Dict[str, Any]] = None
+        axes: Optional[Dict[str, Any]] = None,
+        layout: str = "L02"
     ) -> Dict[str, Any]:
         """
-        Generate a Chart.js configuration via Chart AI Service.
+        Generate a Chart.js configuration via Analytics Microservice v3.0.
+
+        Uses the /generate endpoint with async job polling.
 
         Args:
-            prompt: Description of the chart data
-            chart_type: Type of chart (bar, line, pie, etc.)
+            prompt: Description of the chart data (used as content)
+            chart_type: Type of chart (bar_vertical, line, pie, etc.)
             presentation_id: Presentation identifier
             slide_id: Slide identifier
             element_id: Element identifier
@@ -64,62 +71,85 @@ class ChartService:
             data: User-provided data points (optional)
             generate_data: Generate synthetic data if no data provided
             axes: Axis configuration (labels, min/max, stacked)
+            layout: Layout identifier (default L02 for chart slides)
 
         Returns:
             Dict with success status and either chart config or error details
         """
-        # Build context object matching backend ChartContext schema
-        # Required fields: presentationTitle, slideIndex
-        backend_context = {
-            "presentationTitle": context.get("presentationTitle", "Untitled"),
-            "slideIndex": context.get("slideIndex", 0),
+        # Map simple chart types to Analytics service types
+        chart_type_map = {
+            "bar": "bar_vertical",
+            "line": "line",
+            "pie": "pie",
+            "doughnut": "doughnut",
+            "area": "area",
+            "scatter": "scatter",
+            "radar": "radar",
+            "polarArea": "polar_area",
+            "bubble": "bubble",
+            "treemap": "treemap"
         }
-        # Optional context fields
-        if context.get("slideTitle"):
-            backend_context["slideTitle"] = context["slideTitle"]
-        if context.get("industry"):
-            backend_context["industry"] = context["industry"]
-        if context.get("timeFrame"):
-            backend_context["timeFrame"] = context["timeFrame"]
+        mapped_chart_type = chart_type_map.get(chart_type, chart_type)
 
+        # Get theme from style - map to valid Analytics service themes
+        # Valid themes: professional, vibrant, minimal, colorful
+        theme_map = {
+            "default": "professional",
+            "professional": "professional",
+            "vibrant": "vibrant",
+            "pastel": "pastel",
+            "monochrome": "minimal",
+            "colorful": "colorful"
+        }
+        raw_theme = style.get("palette", "professional") if style else "professional"
+        theme = theme_map.get(raw_theme, "professional")
+
+        # Build request matching ChartRequest schema
+        title = context.get("slideTitle") or context.get("presentationTitle") or "Chart"
         request_body = {
-            "prompt": prompt,
-            "chartType": chart_type,
-            "presentationId": presentation_id,
-            "slideId": slide_id,
-            "elementId": element_id,
-            "context": backend_context,
-            "constraints": constraints,
+            "content": prompt,
+            "title": title,
+            "chart_type": mapped_chart_type,
+            "theme": theme
         }
 
-        # Add style if provided
-        if style:
-            request_body["style"] = style
-
+        # Add data if provided
         if data:
-            # Convert data to Chart AI format
             request_body["data"] = [
                 {"label": d.get("label", str(i)), "value": d.get("value", 0)}
                 for i, d in enumerate(data)
             ]
-        else:
-            request_body["generateData"] = generate_data
 
-        if axes:
-            request_body["axes"] = axes
-
-        logger.info(f"Generating chart: type={chart_type}, element={element_id}")
-        logger.debug(f"Request body: {request_body}")
+        logger.info(f"Generating chart: type={mapped_chart_type}, element={element_id}")
+        logger.info(f"Chart request body: {request_body}")
 
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
+                # Submit job
                 response = await client.post(
-                    f"{self.base_url}/api/ai/chart/generate",
+                    f"{self.base_url}/generate",
                     json=request_body
                 )
                 response.raise_for_status()
-                result = response.json()
-                logger.info(f"Chart generated successfully: {element_id}")
+                job_data = response.json()
+                job_id = job_data.get("job_id")
+
+                if not job_id:
+                    return {
+                        "success": False,
+                        "error": {
+                            "code": "NO_JOB_ID",
+                            "message": "Chart service did not return a job ID",
+                            "retryable": True
+                        }
+                    }
+
+                logger.info(f"Chart job submitted: {job_id}")
+
+                # Poll for completion
+                result = await self._poll_job(client, job_id)
+                if result.get("success"):
+                    logger.info(f"Chart generated successfully: {element_id}")
                 return result
 
         except httpx.TimeoutException:
@@ -177,10 +207,120 @@ class ChartService:
                 }
             }
 
+    async def _poll_job(self, client: httpx.AsyncClient, job_id: str) -> Dict[str, Any]:
+        """
+        Poll the job status until completion or timeout.
+
+        Args:
+            client: The HTTP client to use
+            job_id: The job ID to poll
+
+        Returns:
+            Dict with success status and chart data or error
+        """
+        start_time = asyncio.get_event_loop().time()
+
+        while True:
+            elapsed = asyncio.get_event_loop().time() - start_time
+            if elapsed > self.poll_timeout:
+                return {
+                    "success": False,
+                    "error": {
+                        "code": "POLL_TIMEOUT",
+                        "message": f"Chart generation timed out after {self.poll_timeout}s",
+                        "retryable": True
+                    }
+                }
+
+            try:
+                response = await client.get(f"{self.base_url}/status/{job_id}")
+                response.raise_for_status()
+                status_data = response.json()
+
+                status = status_data.get("status", "unknown")
+                logger.debug(f"Chart job {job_id} status: {status}")
+
+                if status == "completed":
+                    # Build Chart.js compatible config from the data
+                    chart_data = status_data.get("chart_data", {})
+                    chart_type = status_data.get("chart_type", "bar")
+
+                    # Create Chart.js configuration
+                    chartjs_config = {
+                        "type": chart_type.replace("_vertical", "").replace("_horizontal", ""),
+                        "data": {
+                            "labels": chart_data.get("labels", []),
+                            "datasets": [{
+                                "label": chart_data.get("title", "Data"),
+                                "data": chart_data.get("values", []),
+                                "backgroundColor": [
+                                    "#3B82F6", "#10B981", "#F59E0B", "#EF4444",
+                                    "#8B5CF6", "#EC4899", "#06B6D4", "#84CC16"
+                                ][:len(chart_data.get("values", []))]
+                            }]
+                        },
+                        "options": {
+                            "responsive": True,
+                            "maintainAspectRatio": False,
+                            "plugins": {
+                                "title": {
+                                    "display": True,
+                                    "text": chart_data.get("title", "")
+                                }
+                            }
+                        }
+                    }
+
+                    # Return successful result
+                    return {
+                        "success": True,
+                        "data": {
+                            "chartConfig": chartjs_config,
+                            "chartUrl": status_data.get("chart_url"),
+                            "rawData": chart_data,
+                            "chartType": chart_type,
+                            "theme": status_data.get("theme"),
+                            "metadata": status_data.get("metadata")
+                        }
+                    }
+                elif status == "failed":
+                    return {
+                        "success": False,
+                        "error": {
+                            "code": "CHART_GENERATION_FAILED",
+                            "message": status_data.get("error", "Chart generation failed"),
+                            "retryable": True
+                        }
+                    }
+                else:
+                    # Still processing, wait and retry
+                    await asyncio.sleep(self.poll_interval)
+
+            except httpx.HTTPStatusError as e:
+                return {
+                    "success": False,
+                    "error": {
+                        "code": f"POLL_HTTP_{e.response.status_code}",
+                        "message": f"Error polling chart status: {e.response.status_code}",
+                        "retryable": True
+                    }
+                }
+            except Exception as e:
+                logger.error(f"Error polling chart job {job_id}: {e}")
+                return {
+                    "success": False,
+                    "error": {
+                        "code": "POLL_ERROR",
+                        "message": str(e),
+                        "retryable": True
+                    }
+                }
+
     async def get_constraints(self) -> Dict[str, Any]:
         """
-        Get grid size constraints and data limits for all chart types.
+        Get chart types with their constraints.
 
+        Fetches from /api/v1/chart-types endpoint and extracts constraints.
         Results are cached after first successful call.
 
         Returns:
@@ -190,13 +330,28 @@ class ChartService:
             logger.debug("Returning cached constraints")
             return self._constraints_cache
 
-        logger.info("Fetching chart constraints from service")
+        logger.info("Fetching chart types/constraints from service")
 
         try:
             async with httpx.AsyncClient(timeout=10) as client:
-                response = await client.get(f"{self.base_url}/api/ai/chart/constraints")
+                response = await client.get(f"{self.base_url}/api/v1/chart-types/chartjs")
                 response.raise_for_status()
-                self._constraints_cache = response.json()
+                chart_types = response.json()
+
+                # Build constraints from chart types data
+                min_sizes = {}
+                for ct in chart_types if isinstance(chart_types, list) else []:
+                    chart_id = ct.get("id", ct.get("type", "unknown"))
+                    min_sizes[chart_id] = {
+                        "width": ct.get("minWidth", 3),
+                        "height": ct.get("minHeight", 3)
+                    }
+
+                self._constraints_cache = {
+                    "success": True,
+                    "minimumGridSizes": min_sizes,
+                    "chartTypes": chart_types
+                }
                 return self._constraints_cache
 
         except Exception as e:
